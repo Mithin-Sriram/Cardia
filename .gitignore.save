@@ -1,0 +1,16 @@
+# Python virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# ML generated data
+ml/data/*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables
+.env
+
