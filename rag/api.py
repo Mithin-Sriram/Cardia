@@ -13,6 +13,7 @@ from retrieval.retriever import retrieve
 from answer.answer_engine import create_grounded_response
 from rag.database.explanation_repository import save_explanation
 from rag.database.session_repository import get_session
+from rag.database.knowledge_source_repository import find_knowledge_source
 
 
 app = FastAPI(
@@ -65,6 +66,27 @@ def ask_question(request: QuestionRequest):
         simulation_state=request.simulation_state,
     )
 
+    knowledge_sources = []
+
+    for source in response["sources"]:
+        knowledge_source = find_knowledge_source(
+            title=source.get("source_title", ""),
+            author=source.get("author"),
+            source_type=source.get("source_type"),
+        )
+
+        if knowledge_source:
+            source["knowledge_source_id"] = knowledge_source["id"]
+
+            knowledge_sources.append(
+                {
+                    "id": knowledge_source["id"],
+                    "title": knowledge_source["title"],
+                    "author": knowledge_source["author"],
+                    "source_type": knowledge_source["source_type"],
+                }
+            )
+
     saved_explanation = save_explanation(
         question=response["question"],
         answer=None,
@@ -75,6 +97,8 @@ def ask_question(request: QuestionRequest):
         confidence=None,
         session_id=request.session_id,
     )
+
+    response["knowledge_sources"] = knowledge_sources
 
     response["database"] = {
         "saved": True,
