@@ -27,7 +27,9 @@ DEFAULT_TOP_K = 5
 
 print("Loading CARDIA embedding model...")
 
-_embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+_embedding_model = SentenceTransformer(
+    EMBEDDING_MODEL_NAME
+)
 
 print("Embedding model loaded.")
 
@@ -126,14 +128,32 @@ def retrieve(
     Returns
     -------
     list[dict]
-        Structured retrieved evidence.
+        Structured retrieved evidence including:
+
+        - chunk identity
+        - title and text
+        - similarity score
+        - source provenance
+        - topic
+        - organ
+        - mechanism
+        - equations
+        - chapter
+        - authority level
+        - source type
+        - author
+        - page
     """
 
     if not question or not question.strip():
-        raise ValueError("Question cannot be empty.")
+        raise ValueError(
+            "Question cannot be empty."
+        )
 
     if top_k < 1:
-        raise ValueError("top_k must be at least 1.")
+        raise ValueError(
+            "top_k must be at least 1."
+        )
 
     # --------------------------------------------------------
     # Create question embedding
@@ -177,16 +197,76 @@ def retrieve(
 
         evidence.append(
             {
-                "chunk_id": payload.get("chunk_id"),
-                "title": payload.get("title"),
-                "text": payload.get("text"),
-                "score": float(result.score),
-                "source": payload.get("source"),
-                "topic": payload.get("topic"),
-                "organ": payload.get("organ"),
-                "mechanism": payload.get("mechanism", []),
-                "equation": payload.get("equation", []),
-                "page": payload.get("page"),
+                # ------------------------------------------------
+                # Identity
+                # ------------------------------------------------
+                "chunk_id": payload.get(
+                    "chunk_id"
+                ),
+
+                "title": payload.get(
+                    "title"
+                ),
+
+                "text": payload.get(
+                    "text"
+                ),
+
+                "score": float(
+                    result.score
+                ),
+
+                # ------------------------------------------------
+                # Source provenance
+                # ------------------------------------------------
+                "source": payload.get(
+                    "source"
+                ),
+
+                "source_title": payload.get(
+                    "source_title"
+                ),
+
+                "source_type": payload.get(
+                    "source_type"
+                ),
+
+                "authority_level": payload.get(
+                    "authority_level"
+                ),
+
+                "author": payload.get(
+                    "author"
+                ),
+
+                "chapter": payload.get(
+                    "chapter"
+                ),
+
+                "page": payload.get(
+                    "page"
+                ),
+
+                # ------------------------------------------------
+                # Physiological metadata
+                # ------------------------------------------------
+                "topic": payload.get(
+                    "topic"
+                ),
+
+                "organ": payload.get(
+                    "organ"
+                ),
+
+                "mechanism": payload.get(
+                    "mechanism",
+                    []
+                ),
+
+                "equation": payload.get(
+                    "equation",
+                    []
+                ),
             }
         )
 
