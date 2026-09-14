@@ -1,149 +1,145 @@
-from pathlib import Path
 import json
 import re
+from pathlib import Path
 
+
+# ---------------------------------------------------------
+# Paths
+# ---------------------------------------------------------
 
 INPUT_FILE = Path("data/clean/cardia_physiology.txt")
 OUTPUT_FILE = Path("data/chunks/cardia_chunks.json")
 
 
-def normalize_title(line: str):
+# ---------------------------------------------------------
+# Main CARDIA section titles
+# ---------------------------------------------------------
+
+MAIN_SECTIONS = [
+    "CARDIA Simulation Variables",
+    "Heart Rate",
+    "Stroke Volume",
+    "Cardiac Output",
+    "End-Diastolic Volume",
+    "End-Systolic Volume",
+    "Cardiac Conduction System",
+    "SA Node",
+    "AV Node",
+    "Bundle of His",
+    "Purkinje Fibers",
+    "Cardiac Valves",
+    "Mitral Valve",
+    "Aortic Valve",
+    "Tricuspid Valve",
+    "Pulmonary Valve",
+    "Blood Pressure",
+    "Mean Arterial Pressure",
+    "Systemic Vascular Resistance",
+    "Left Ventricular Pressure",
+    "Aortic Pressure",
+    "Contractility",
+    "Blood Volume",
+    "Cardiac Cycle",
+    "Cause-and-Effect Reasoning Rules",
+    "Current CARDIA Baseline State",
+    "Evidence Sources",
+    "RAG Safety Rules",
+    "Source Provenance",
+]
+
+
+# ---------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------
+
+def normalize_title(title):
+    title = re.sub(r"^\d+\.\s*", "", title)
+    title = re.sub(r"\s+", " ", title)
+    return title.strip()
+
+
+def is_main_section_title(line):
     """
-    Convert a numbered section heading into its clean title.
+    Only the known CARDIA section titles are treated
+    as new sections.
 
-    Example:
-        1. Heart Rate
-    becomes:
-        Heart Rate
-    """
+    This prevents numbered reasoning rules such as:
 
-    line = line.strip()
+    1. Identify what changed...
+    2. Retrieve relevant evidence...
 
-    line = re.sub(
-        r"^\d+\.\s*",
-        "",
-        line,
-    )
-
-    return line.strip()
-
-
-def is_main_section_title(line: str):
-    """
-    Detect actual CARDIA knowledge-base section headings.
-
-    The source contains numbered physiological sections,
-    but some sections also contain numbered reasoning rules.
-    Only the known main headings are treated as boundaries.
-    """
-
-    main_titles = {
-        "CARDIA Simulation Variables",
-        "Heart Rate",
-        "Stroke Volume",
-        "Cardiac Output",
-        "EDV",
-        "ESV",
-        "Cardiac Conduction System",
-        "SA Node",
-        "AV Node",
-        "Bundle of His",
-        "Purkinje Fibers",
-        "Cardiac Valves",
-        "Mitral Valve",
-        "Aortic Valve",
-        "Tricuspid Valve",
-        "Pulmonary Valve",
-        "Blood Pressure",
-        "Mean Arterial Pressure",
-        "Systemic Vascular Resistance",
-        "Left Ventricular Pressure",
-        "Aortic Pressure",
-        "Contractility",
-        "Blood Volume",
-        "Cardiac Cycle",
-        "Cause-and-Effect Reasoning Rules",
-        "Current CARDIA Baseline State",
-        "Evidence Sources",
-        "RAG Safety Rules",
-        "Source Provenance",
-    }
-
-    clean_line = normalize_title(line)
-
-    return clean_line in main_titles
-
-
-def split_sections(text: str):
-    """
-    Split the cleaned CARDIA physiology document into
-    meaningful physiological sections.
-
-    Numbered sub-rules inside a section remain part of
-    that section instead of becoming separate chunks.
+    from becoming separate chunks.
     """
 
+    normalized = normalize_title(line.strip())
+
+    return normalized in MAIN_SECTIONS
+
+
+# ---------------------------------------------------------
+# Section splitting
+# ---------------------------------------------------------
+
+def split_sections(text):
     lines = text.splitlines()
 
     sections = []
 
     current_title = None
-    current_content = []
+    current_lines = []
 
     for line in lines:
 
-        line = line.strip()
+        stripped = line.strip()
 
-        if not line:
+        if not stripped:
             continue
 
-        if is_main_section_title(line):
+        if is_main_section_title(stripped):
 
             if current_title is not None:
 
                 sections.append(
                     {
-                        "title": current_title,
-                        "text": "\n".join(
-                            current_content
-                        ).strip(),
+                        "title": normalize_title(current_title),
+                        "text": "\n".join(current_lines).strip(),
                     }
                 )
 
-            current_title = normalize_title(line)
-
-            current_content = []
+            current_title = stripped
+            current_lines = []
 
         else:
 
-            current_content.append(line)
+            current_lines.append(stripped)
 
     if current_title is not None:
 
         sections.append(
             {
-                "title": current_title,
-                "text": "\n".join(
-                    current_content
-                ).strip(),
+                "title": normalize_title(current_title),
+                "text": "\n".join(current_lines).strip(),
             }
         )
 
     return sections
 
 
-def determine_topic(title: str, text: str):
-    """
-    Assign a single retrieval topic based primarily
-    on the section title.
-    """
+# ---------------------------------------------------------
+# Metadata: topic
+# ---------------------------------------------------------
+
+def determine_topic(title):
 
     title_lower = title.lower()
 
-    title_topics = {
+    topic_map = {
+
+        "cardia simulation variables":
+            "simulation_state",
 
         "heart rate":
-            "heart_rate",
+            "cardiac_output",
 
         "stroke volume":
             "cardiac_output",
@@ -227,168 +223,172 @@ def determine_topic(title: str, text: str):
             "provenance",
     }
 
-    if title_lower in title_topics:
-        return title_topics[title_lower]
-
-    if title_lower == "cardia simulation variables":
-        return "simulation_state"
-
-    if title_lower == "edv":
-        return "cardiac_output"
-
-    if title_lower == "esv":
-        return "cardiac_output"
-
-    return "general_physiology"
+    return topic_map.get(
+        title_lower,
+        "cardiovascular_physiology"
+    )
 
 
-def determine_mechanisms(
-    title: str,
-    text: str,
-):
-    """
-    Detect physiological mechanisms relevant to
-    retrieval and future metadata filtering.
-    """
+# ---------------------------------------------------------
+# Metadata: organ
+# ---------------------------------------------------------
+
+def determine_organ(title):
+
+    title_lower = title.lower()
+
+    conduction_keywords = [
+        "sa node",
+        "av node",
+        "bundle of his",
+        "purkinje",
+        "conduction",
+    ]
+
+    if any(
+        keyword in title_lower
+        for keyword in conduction_keywords
+    ):
+        return "cardiac_conduction_system"
+
+    if "valve" in title_lower:
+        return "heart"
+
+    heart_keywords = [
+        "heart rate",
+        "stroke volume",
+        "cardiac output",
+        "end-diastolic volume",
+        "end-systolic volume",
+        "contractility",
+        "cardiac cycle",
+        "left ventricular pressure",
+    ]
+
+    if any(
+        keyword in title_lower
+        for keyword in heart_keywords
+    ):
+        return "heart"
+
+    cardiovascular_keywords = [
+        "blood pressure",
+        "mean arterial pressure",
+        "systemic vascular resistance",
+        "blood volume",
+        "aortic pressure",
+    ]
+
+    if any(
+        keyword in title_lower
+        for keyword in cardiovascular_keywords
+    ):
+        return "cardiovascular_system"
+
+    return "cardiovascular_system"
+
+
+# ---------------------------------------------------------
+# Metadata: mechanism
+# ---------------------------------------------------------
+
+def determine_mechanism(title, text):
 
     combined = f"{title} {text}".lower()
 
-    mechanism_keywords = {
-
-        "electrical_conduction": [
-            "electrical",
-            "conduction",
-            "impulse",
-            "pacemaker",
-            "depolarization",
-        ],
-
-        "preload": [
-            "preload",
-            "edv",
-            "venous return",
-            "filling",
-        ],
-
-        "afterload": [
-            "afterload",
-            "svr",
-            "aortic pressure",
-        ],
-
-        "contractility": [
-            "contractility",
-            "inotropy",
-        ],
-
-        "pressure": [
-            "pressure",
-            "blood pressure",
-            "map",
-        ],
-
-        "valve_flow": [
-            "valve",
-            "flow",
-            "regurgitation",
-            "opening",
-            "closing",
-        ],
-
-        "ventricular_ejection": [
-            "ejection",
-            "ventricular ejection",
-        ],
-
-        "ventricular_filling": [
-            "filling",
-            "ventricular filling",
-        ],
-    }
-
     mechanisms = []
 
-    for mechanism_name, keywords in mechanism_keywords.items():
+    if (
+        "co =" in combined
+        or "cardiac output" in combined
+    ):
+        mechanisms.append(
+            "cardiac_output"
+        )
 
-        if any(
-            keyword in combined
-            for keyword in keywords
-        ):
+    if "sv = edv - esv" in combined:
+        mechanisms.append(
+            "stroke_volume"
+        )
 
-            mechanisms.append(
-                mechanism_name
-            )
+    if (
+        "conduction" in combined
+        or "sa node" in combined
+        or "av node" in combined
+    ):
+        mechanisms.append(
+            "electrical_conduction"
+        )
+
+    if "valve" in combined:
+        mechanisms.append(
+            "directional_blood_flow"
+        )
+
+    if (
+        "map" in combined
+        or "mean arterial pressure" in combined
+    ):
+        mechanisms.append(
+            "arterial_pressure"
+        )
+
+    if "contractility" in combined:
+        mechanisms.append(
+            "ventricular_contractility"
+        )
+
+    if "blood volume" in combined:
+        mechanisms.append(
+            "circulating_volume"
+        )
+
+    if not mechanisms:
+        mechanisms.append(
+            "cardiovascular_physiology"
+        )
 
     return mechanisms
 
 
-def extract_equations(text: str):
-    """
-    Detect known CARDIA physiology equations
-    present inside each chunk.
-    """
+# ---------------------------------------------------------
+# Metadata: equations
+# ---------------------------------------------------------
+
+def extract_equations(text):
 
     equations = []
 
-    known_equations = [
+    patterns = [
 
-        "CO = HR × SV",
+        r"CO\s*=\s*HR\s*[×x*]\s*SV",
 
-        "SV = EDV - ESV",
+        r"SV\s*=\s*EDV\s*-\s*ESV",
 
-        "MAP ≈ DBP + 1/3(SBP - DBP)",
+        r"MAP\s*[≈=]\s*DBP\s*\+\s*1/3\s*\(\s*SBP\s*-\s*DBP\s*\)",
 
-        "MAP = (SBP + 2 × DBP) / 3",
+        r"MAP\s*=\s*\(\s*SBP\s*\+\s*2\s*[×x*]\s*DBP\s*\)\s*/\s*3",
     ]
 
-    for equation in known_equations:
+    for pattern in patterns:
 
-        if equation in text:
+        matches = re.findall(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
 
-            equations.append(
-                equation
-            )
+        for match in matches:
+
+            if match not in equations:
+                equations.append(match)
 
     return equations
 
 
-def infer_metadata(
-    title: str,
-    text: str,
-):
-    """
-    Build the metadata schema used by the RAG system.
-    """
-
-    return {
-
-        "source":
-            "cardia_physiology.md",
-
-        "topic":
-            determine_topic(
-                title,
-                text,
-            ),
-
-        "organ":
-            "heart",
-
-        "mechanism":
-            determine_mechanisms(
-                title,
-                text,
-            ),
-
-        "equation":
-            extract_equations(
-                text,
-            ),
-
-        "page":
-            None,
-    }
-
+# ---------------------------------------------------------
+# Main
+# ---------------------------------------------------------
 
 def main():
 
@@ -398,82 +398,91 @@ def main():
             f"Input file not found: {INPUT_FILE}"
         )
 
-    OUTPUT_FILE.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
     text = INPUT_FILE.read_text(
         encoding="utf-8"
     )
 
     sections = split_sections(text)
 
-    if len(sections) <= 1:
-
-        raise ValueError(
-            "The physiology source was not split into "
-            "multiple meaningful sections."
-        )
-
     chunks = []
 
     for index, section in enumerate(
-        sections
+        sections,
+        start=1
     ):
 
-        metadata = infer_metadata(
-            section["title"],
-            section["text"],
+        title = section["title"]
+        section_text = section["text"]
+
+        topic = determine_topic(title)
+
+        organ = determine_organ(title)
+
+        mechanisms = determine_mechanism(
+            title,
+            section_text
+        )
+
+        equations = extract_equations(
+            section_text
         )
 
         chunk = {
 
             "chunk_id":
-                f"cardia_{index + 1:03d}",
+                f"cardia_{index:03d}",
 
             "title":
-                section["title"],
+                title,
 
             "text":
-                section["text"],
+                section_text,
 
-            "metadata":
-                metadata,
+            "source":
+                "cardia_physiology.md",
+
+            "topic":
+                topic,
+
+            "organ":
+                organ,
+
+            "mechanism":
+                mechanisms,
+
+            "equation":
+                equations,
+
+            "page":
+                None,
         }
 
         chunks.append(chunk)
 
-    OUTPUT_FILE.write_text(
+    OUTPUT_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-        json.dumps(
+    with open(
+        OUTPUT_FILE,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
             chunks,
+            file,
             indent=2,
-            ensure_ascii=False,
-        ),
+            ensure_ascii=False
+        )
 
-        encoding="utf-8",
-    )
-
-    print(
-        "Chunking complete."
-    )
-
-    print(
-        f"Input: {INPUT_FILE}"
-    )
-
-    print(
-        f"Output: {OUTPUT_FILE}"
-    )
-
-    print(
-        f"Chunks created: {len(chunks)}"
-    )
-
-    print(
-        "\nAll chunks:"
-    )
+    print()
+    print("Metadata chunking complete.")
+    print(f"Input: {INPUT_FILE}")
+    print(f"Output: {OUTPUT_FILE}")
+    print(f"Chunks created: {len(chunks)}")
+    print()
 
     for chunk in chunks:
 
@@ -481,10 +490,11 @@ def main():
             f"[{chunk['chunk_id']}] "
             f"{chunk['title']} "
             f"→ "
-            f"{chunk['metadata']['topic']}"
+            f"topic={chunk['topic']}, "
+            f"organ={chunk['organ']}, "
+            f"mechanism={chunk['mechanism']}"
         )
 
 
 if __name__ == "__main__":
-
     main()
