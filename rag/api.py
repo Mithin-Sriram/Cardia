@@ -4,30 +4,16 @@ import sys
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-
-# --------------------------------------------------
-# RAG DIRECTORY
-# --------------------------------------------------
-
 RAG_DIR = Path(__file__).resolve().parent
 
 if str(RAG_DIR) not in sys.path:
     sys.path.insert(0, str(RAG_DIR))
 
-
-# --------------------------------------------------
-# RAG COMPONENTS
-# --------------------------------------------------
-
 from retrieval.retriever import retrieve
 from answer.answer_engine import create_grounded_response
-
 from rag.database.explanation_repository import save_explanation
+from rag.database.session_repository import get_session
 
-
-# --------------------------------------------------
-# FASTAPI APPLICATION
-# --------------------------------------------------
 
 app = FastAPI(
     title="CARDIA RAG API",
@@ -39,18 +25,11 @@ app = FastAPI(
 )
 
 
-# --------------------------------------------------
-# REQUEST MODEL
-# --------------------------------------------------
-
 class QuestionRequest(BaseModel):
     question: str
     simulation_state: dict | None = None
+    session_id: str | None = None
 
-
-# --------------------------------------------------
-# HEALTH CHECK
-# --------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -59,10 +38,6 @@ def health():
         "service": "cardia-rag",
     }
 
-
-# --------------------------------------------------
-# ASK ENDPOINT
-# --------------------------------------------------
 
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
@@ -74,31 +49,21 @@ def ask_question(request: QuestionRequest):
             "message": "Question cannot be empty.",
         }
 
+    session = None
 
-    # --------------------------------------------------
-    # RETRIEVE PHYSIOLOGY EVIDENCE
-    # --------------------------------------------------
+    if request.session_id:
+        session = get_session(request.session_id)
 
     evidence = retrieve(
         question=question,
         top_k=5,
     )
 
-
-    # --------------------------------------------------
-    # BUILD GROUNDED RESPONSE
-    # --------------------------------------------------
-
     response = create_grounded_response(
         question=question,
         retrieved_evidence=evidence,
         simulation_state=request.simulation_state,
     )
-
-
-    # --------------------------------------------------
-    # PERSIST GROUNDED CONTEXT
-    # --------------------------------------------------
 
     saved_explanation = save_explanation(
         question=response["question"],
@@ -108,16 +73,19 @@ def ask_question(request: QuestionRequest):
         ],
         sources=response["sources"],
         confidence=None,
+        session_id=request.session_id,
     )
-
-
-    # --------------------------------------------------
-    # RETURN RESPONSE
-    # --------------------------------------------------
 
     response["database"] = {
         "saved": True,
         "explanation_id": saved_explanation["id"],
+        "session_id": request.session_id,
     }
+
+    if session:
+        response["database"]["session"] = {
+            "id": session["id"],
+            "status": session["status"],
+        }
 
     return response
