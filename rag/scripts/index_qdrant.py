@@ -27,7 +27,12 @@ if not CHUNKS_FILE.exists():
         f"Chunk file not found: {CHUNKS_FILE}"
     )
 
-with open(CHUNKS_FILE, "r", encoding="utf-8") as file:
+with open(
+    CHUNKS_FILE,
+    "r",
+    encoding="utf-8"
+) as file:
+
     chunks = json.load(file)
 
 print(f"Loaded chunks: {len(chunks)}")
@@ -39,7 +44,9 @@ print(f"Loaded chunks: {len(chunks)}")
 
 print("Loading embedding model...")
 
-model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+model = SentenceTransformer(
+    EMBEDDING_MODEL_NAME
+)
 
 print("Embedding model loaded.")
 
@@ -48,7 +55,10 @@ print("Embedding model loaded.")
 # Create embeddings
 # ---------------------------------------------------------
 
-texts = [chunk["text"] for chunk in chunks]
+texts = [
+    chunk["text"]
+    for chunk in chunks
+]
 
 print("Creating embeddings...")
 
@@ -58,15 +68,23 @@ embeddings = model.encode(
     show_progress_bar=True
 )
 
-print(f"Embeddings created: {len(embeddings)}")
-print(f"Vector dimension: {len(embeddings[0])}")
+print(
+    f"Embeddings created: {len(embeddings)}"
+)
+
+print(
+    f"Vector dimension: {len(embeddings[0])}"
+)
 
 
 # ---------------------------------------------------------
 # Create local Qdrant database
 # ---------------------------------------------------------
 
-QDRANT_PATH.mkdir(parents=True, exist_ok=True)
+QDRANT_PATH.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 print("Opening local Qdrant database...")
 
@@ -81,11 +99,19 @@ client = QdrantClient(
 
 vector_size = len(embeddings[0])
 
-if client.collection_exists(COLLECTION_NAME):
-    print(f"Collection '{COLLECTION_NAME}' already exists.")
+if client.collection_exists(
+    COLLECTION_NAME
+):
+
+    print(
+        f"Collection '{COLLECTION_NAME}' already exists."
+    )
+
     print("Deleting old collection...")
 
-    client.delete_collection(COLLECTION_NAME)
+    client.delete_collection(
+        COLLECTION_NAME
+    )
 
 
 client.create_collection(
@@ -96,7 +122,9 @@ client.create_collection(
     )
 )
 
-print(f"Created collection: {COLLECTION_NAME}")
+print(
+    f"Created collection: {COLLECTION_NAME}"
+)
 
 
 # ---------------------------------------------------------
@@ -105,21 +133,86 @@ print(f"Created collection: {COLLECTION_NAME}")
 
 points = []
 
-for index, (chunk, embedding) in enumerate(
+for index, (
+    chunk,
+    embedding
+) in enumerate(
     zip(chunks, embeddings)
 ):
 
-    payload = {
-        "chunk_id": chunk.get("chunk_id"),
-        "title": chunk.get("title"),
-        "text": chunk.get("text"),
+    # -----------------------------------------------------
+    # Complete metadata payload
+    # -----------------------------------------------------
 
-        "source": chunk.get("source"),
-        "topic": chunk.get("topic"),
-        "organ": chunk.get("organ"),
-        "mechanism": chunk.get("mechanism"),
-        "equation": chunk.get("equation"),
-        "page": chunk.get("page"),
+    payload = {
+
+        # ---------------------------------------------
+        # Identity
+        # ---------------------------------------------
+
+        "chunk_id": chunk.get(
+            "chunk_id"
+        ),
+
+        "title": chunk.get(
+            "title"
+        ),
+
+        "text": chunk.get(
+            "text"
+        ),
+
+        # ---------------------------------------------
+        # Source provenance
+        # ---------------------------------------------
+
+        "source": chunk.get(
+            "source"
+        ),
+
+        "source_title": chunk.get(
+            "source_title"
+        ),
+
+        "source_type": chunk.get(
+            "source_type"
+        ),
+
+        "authority_level": chunk.get(
+            "authority_level"
+        ),
+
+        "author": chunk.get(
+            "author"
+        ),
+
+        "chapter": chunk.get(
+            "chapter"
+        ),
+
+        "page": chunk.get(
+            "page"
+        ),
+
+        # ---------------------------------------------
+        # Physiological metadata
+        # ---------------------------------------------
+
+        "topic": chunk.get(
+            "topic"
+        ),
+
+        "organ": chunk.get(
+            "organ"
+        ),
+
+        "mechanism": chunk.get(
+            "mechanism"
+        ),
+
+        "equation": chunk.get(
+            "equation"
+        ),
     }
 
     point = PointStruct(
@@ -144,19 +237,33 @@ client.upsert(
 
 
 # ---------------------------------------------------------
-# Verify
+# Verify collection
 # ---------------------------------------------------------
 
 collection_info = client.get_collection(
     COLLECTION_NAME
 )
 
+
 print()
 print("==========================================")
 print("QDRANT INDEXING COMPLETE")
 print("==========================================")
-print(f"Collection: {COLLECTION_NAME}")
-print(f"Chunks indexed: {collection_info.points_count}")
-print(f"Vector dimension: {vector_size}")
-print(f"Database: {QDRANT_PATH}")
+
+print(
+    f"Collection: {COLLECTION_NAME}"
+)
+
+print(
+    f"Chunks indexed: {collection_info.points_count}"
+)
+
+print(
+    f"Vector dimension: {vector_size}"
+)
+
+print(
+    f"Database: {QDRANT_PATH}"
+)
+
 print("==========================================")

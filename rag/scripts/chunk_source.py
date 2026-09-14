@@ -12,6 +12,19 @@ OUTPUT_FILE = Path("data/chunks/cardia_chunks.json")
 
 
 # ---------------------------------------------------------
+# Source provenance
+# ---------------------------------------------------------
+
+SOURCE_METADATA = {
+    "source": "cardia_physiology.md",
+    "source_title": "CARDIA Internal Physiology Notes",
+    "source_type": "internal_educational_notes",
+    "authority_level": "project_reference",
+    "author": "CARDIA Team",
+}
+
+
+# ---------------------------------------------------------
 # Main CARDIA section titles
 # ---------------------------------------------------------
 
@@ -136,10 +149,10 @@ def determine_topic(title):
     topic_map = {
 
         "cardia simulation variables":
-            "simulation_state",
+            "simulation_variables",
 
         "heart rate":
-            "cardiac_output",
+            "cardiac_rate",
 
         "stroke volume":
             "cardiac_output",
@@ -148,10 +161,10 @@ def determine_topic(title):
             "cardiac_output",
 
         "end-diastolic volume":
-            "cardiac_output",
+            "ventricular_filling",
 
         "end-systolic volume":
-            "cardiac_output",
+            "ventricular_emptying",
 
         "cardiac conduction system":
             "cardiac_conduction",
@@ -193,22 +206,22 @@ def determine_topic(title):
             "hemodynamics",
 
         "left ventricular pressure":
-            "hemodynamics",
+            "ventricular_hemodynamics",
 
         "aortic pressure":
-            "hemodynamics",
+            "arterial_hemodynamics",
 
         "contractility":
-            "contractility",
+            "ventricular_contractility",
 
         "blood volume":
-            "blood_volume",
+            "circulating_volume",
 
         "cardiac cycle":
             "cardiac_cycle",
 
         "cause-and-effect reasoning rules":
-            "reasoning",
+            "causal_reasoning",
 
         "current cardia baseline state":
             "simulation_state",
@@ -306,7 +319,10 @@ def determine_mechanism(title, text):
             "cardiac_output"
         )
 
-    if "sv = edv - esv" in combined:
+    if (
+        "sv = edv - esv" in combined
+        or "stroke volume" in combined
+    ):
         mechanisms.append(
             "stroke_volume"
         )
@@ -387,6 +403,58 @@ def extract_equations(text):
 
 
 # ---------------------------------------------------------
+# Metadata: chapter
+# ---------------------------------------------------------
+
+def determine_chapter(title):
+
+    title_lower = title.lower()
+
+    if title_lower in [
+        "heart rate",
+        "stroke volume",
+        "cardiac output",
+        "end-diastolic volume",
+        "end-systolic volume",
+        "cardiac cycle",
+        "contractility",
+    ]:
+        return "Cardiac Function"
+
+    if title_lower in [
+        "cardiac conduction system",
+        "sa node",
+        "av node",
+        "bundle of his",
+        "purkinje fibers",
+    ]:
+        return "Cardiac Electrophysiology"
+
+    if "valve" in title_lower:
+        return "Cardiac Valves"
+
+    if title_lower in [
+        "blood pressure",
+        "mean arterial pressure",
+        "systemic vascular resistance",
+        "aortic pressure",
+        "left ventricular pressure",
+    ]:
+        return "Cardiovascular Hemodynamics"
+
+    if title_lower == "blood volume":
+        return "Circulating Volume"
+
+    if title_lower in [
+        "cause-and-effect reasoning rules",
+        "current cardia baseline state",
+    ]:
+        return "CARDIA Simulation Reasoning"
+
+    return "CARDIA Reference Material"
+
+
+# ---------------------------------------------------------
 # Main
 # ---------------------------------------------------------
 
@@ -427,6 +495,8 @@ def main():
             section_text
         )
 
+        chapter = determine_chapter(title)
+
         chunk = {
 
             "chunk_id":
@@ -439,7 +509,22 @@ def main():
                 section_text,
 
             "source":
-                "cardia_physiology.md",
+                SOURCE_METADATA["source"],
+
+            "source_title":
+                SOURCE_METADATA["source_title"],
+
+            "source_type":
+                SOURCE_METADATA["source_type"],
+
+            "authority_level":
+                SOURCE_METADATA["authority_level"],
+
+            "author":
+                SOURCE_METADATA["author"],
+
+            "chapter":
+                chapter,
 
             "topic":
                 topic,
@@ -492,7 +577,8 @@ def main():
             f"→ "
             f"topic={chunk['topic']}, "
             f"organ={chunk['organ']}, "
-            f"mechanism={chunk['mechanism']}"
+            f"mechanism={chunk['mechanism']}, "
+            f"source={chunk['source_title']}"
         )
 
 
