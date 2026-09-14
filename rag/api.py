@@ -4,30 +4,17 @@ import sys
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-
-# --------------------------------------------------
-# RAG DIRECTORY
-# --------------------------------------------------
-
 RAG_DIR = Path(__file__).resolve().parent
 
 if str(RAG_DIR) not in sys.path:
     sys.path.insert(0, str(RAG_DIR))
 
-
-# --------------------------------------------------
-# RAG COMPONENTS
-# --------------------------------------------------
-
 from retrieval.retriever import retrieve
 from answer.answer_engine import create_grounded_response
-
 from rag.database.explanation_repository import save_explanation
+from rag.database.session_repository import get_session
+from rag.database.knowledge_source_repository import find_knowledge_source
 
-
-# --------------------------------------------------
-# FASTAPI APPLICATION
-# --------------------------------------------------
 
 app = FastAPI(
     title="CARDIA RAG API",
@@ -39,18 +26,11 @@ app = FastAPI(
 )
 
 
-# --------------------------------------------------
-# REQUEST MODEL
-# --------------------------------------------------
-
 class QuestionRequest(BaseModel):
     question: str
     simulation_state: dict | None = None
+    session_id: str | None = None
 
-
-# --------------------------------------------------
-# HEALTH CHECK
-# --------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -59,10 +39,6 @@ def health():
         "service": "cardia-rag",
     }
 
-
-# --------------------------------------------------
-# ASK ENDPOINT
-# --------------------------------------------------
 
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
@@ -74,20 +50,15 @@ def ask_question(request: QuestionRequest):
             "message": "Question cannot be empty.",
         }
 
+    session = None
 
-    # --------------------------------------------------
-    # RETRIEVE PHYSIOLOGY EVIDENCE
-    # --------------------------------------------------
+    if request.session_id:
+        session = get_session(request.session_id)
 
     evidence = retrieve(
         question=question,
         top_k=5,
     )
-
-
-    # --------------------------------------------------
-    # BUILD GROUNDED RESPONSE
-    # --------------------------------------------------
 
     response = create_grounded_response(
         question=question,
@@ -95,10 +66,26 @@ def ask_question(request: QuestionRequest):
         simulation_state=request.simulation_state,
     )
 
+    knowledge_sources = []
 
-    # --------------------------------------------------
-    # PERSIST GROUNDED CONTEXT
-    # --------------------------------------------------
+    for source in response["sources"]:
+        knowledge_source = find_knowledge_source(
+            title=source.get("source_title", ""),
+            author=source.get("author"),
+            source_type=source.get("source_type"),
+        )
+
+        if knowledge_source:
+            source["knowledge_source_id"] = knowledge_source["id"]
+
+            knowledge_sources.append(
+                {
+                    "id": knowledge_source["id"],
+                    "title": knowledge_source["title"],
+                    "author": knowledge_source["author"],
+                    "source_type": knowledge_source["source_type"],
+                }
+            )
 
     saved_explanation = save_explanation(
         question=response["question"],
@@ -108,16 +95,21 @@ def ask_question(request: QuestionRequest):
         ],
         sources=response["sources"],
         confidence=None,
+        session_id=request.session_id,
     )
 
-
-    # --------------------------------------------------
-    # RETURN RESPONSE
-    # --------------------------------------------------
+    response["knowledge_sources"] = knowledge_sources
 
     response["database"] = {
         "saved": True,
         "explanation_id": saved_explanation["id"],
+        "session_id": request.session_id,
     }
+
+    if session:
+        response["database"]["session"] = {
+            "id": session["id"],
+            "status": session["status"],
+        }
 
     return response
