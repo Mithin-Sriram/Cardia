@@ -47,3 +47,39 @@ def save_explanation(
         )
 
     return response.data[0]
+
+
+def get_session_explanations(
+    session_id: str,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """
+    Retrieve recent explanations belonging to a CARDIA session.
+
+    The results are returned in chronological order so they can
+    be supplied to the answer-generation layer as conversation
+    context.
+    """
+
+    if limit < 1:
+        raise ValueError(
+            "Explanation history limit must be at least 1."
+        )
+
+    response = (
+        get_supabase()
+        .table("explanations")
+        .select(
+            "id, question, answer, simulation_context, "
+            "sources, confidence, created_at"
+        )
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    if not response.data:
+        return []
+
+    return list(reversed(response.data))
